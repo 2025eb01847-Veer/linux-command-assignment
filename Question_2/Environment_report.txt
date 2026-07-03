@@ -1,0 +1,135 @@
+=== Secure Project Workspace Setup Report ===
+User: veerd
+Host: Veerdhawal
+Date: 03-07-2026
+
+--------------------------------------------------
+1. Directory Structure Created
+--------------------------------------------------
+Command:
+mkdir -p ~/ProjectWorkspace/{docs,src,logs}
+ls -R ~/ProjectWorkspace
+
+Output:
+/home/veerd/ProjectWorkspace:
+docs  logs  src
+
+/home/veerd/ProjectWorkspace/docs:
+
+/home/veerd/ProjectWorkspace/logs:
+
+/home/veerd/ProjectWorkspace/src:
+
+Observation:
+The mkdir -p command created the parent directory ProjectWorkspace along with
+three subdirectories (docs, src, logs) in a single command. The -p flag ensured
+no error was thrown even though the parent directory did not exist beforehand.
+ls -R confirms all three subdirectories were created successfully and are
+currently empty.
+
+--------------------------------------------------
+2. File Permissions BEFORE Modification
+--------------------------------------------------
+Command:
+ls -l ~/ProjectWorkspace
+
+Output:
+total 12
+drwxr-xr-x 2 veerd veerd 4096 Jul  3 16:34 docs
+drwxr-xr-x 2 veerd veerd 4096 Jul  3 16:34 logs
+drwxr-xr-x 2 veerd veerd 4096 Jul  3 16:34 src
+
+Observation:
+By default, all three directories were created with permissions 755
+(rwxr-xr-x) — owner has full access, while group and others have read and
+execute access. This default is a direct result of the system's umask value
+being applied to the base directory permission of 777.
+
+--------------------------------------------------
+3. Umask Value Used
+--------------------------------------------------
+Command:
+umask
+umask -S
+
+Output:
+0022
+u=rwx,g=rx,o=rx
+
+Observation:
+The umask value of 0022 is subtracted from the maximum default permissions.
+For directories, the base is 777; subtracting 022 leaves 755, which matches
+exactly what was observed in the "before" permissions above. This confirms
+umask is responsible for the default permission set on newly created
+directories.
+
+--------------------------------------------------
+4. Permission Modification
+--------------------------------------------------
+Command:
+chmod 750 ~/ProjectWorkspace
+chmod 700 ~/ProjectWorkspace/docs
+chmod 770 ~/ProjectWorkspace/src
+chmod 700 ~/ProjectWorkspace/logs
+
+Observation:
+chmod was used to tighten access on each directory according to its intended
+role: the parent workspace was restricted to owner (full) and group
+(read/execute) only; docs and logs were locked down to the owner exclusively
+(700); and src was opened up to full read/write/execute for both owner and
+group (770) to allow collaborative development work.
+
+--------------------------------------------------
+5. File Permissions AFTER Modification
+--------------------------------------------------
+Command:
+ls -l ~/ProjectWorkspace
+
+Output:
+total 12
+drwx------ 2 veerd veerd 4096 Jul  3 16:34 docs
+drwx------ 2 veerd veerd 4096 Jul  3 16:34 logs
+drwxrwx--- 2 veerd veerd 4096 Jul  3 16:34 src
+
+Observation:
+The updated permissions confirm the chmod commands applied correctly: docs
+and logs now show drwx------ (700, owner-only access), while src shows
+drwxrwx--- (770, owner and group have full access, others have none). This
+is a clear, verifiable change from the original 755 default.
+
+--------------------------------------------------
+6. Ownership Details
+--------------------------------------------------
+Command:
+ls -l ~/ProjectWorkspace
+whoami
+
+Output:
+drwx------ 2 veerd veerd 4096 Jul  3 16:34 docs
+drwx------ 2 veerd veerd 4096 Jul  3 16:34 logs
+drwxrwx--- 2 veerd veerd 4096 Jul  3 16:34 src
+veerd
+
+Observation:
+The third and fourth columns of the ls -l output (veerd veerd) show that the
+user "veerd" is both the owner and the group owner of all three directories.
+whoami confirms the current logged-in user is veerd, matching the ownership
+shown — meaning no chown was required since the directories were already
+owned by the correct user from the moment they were created.
+
+--------------------------------------------------
+7. Explanation: How Permissions Protect Project Data
+--------------------------------------------------
+Linux permissions (read, write, execute for owner/group/others) enforce
+access control directly at the filesystem level, independent of any
+application-level security. By setting docs and logs to 700, only the owner
+(veerd) can enter, read, or write to those directories — protecting
+sensitive documentation and log files from any other user on the system,
+even those in the same group. Setting src to 770 strikes a balance: it
+allows trusted group members to collaborate on source code (read, write,
+execute) while still blocking access to anyone outside the group. This
+follows the principle of least privilege — each directory is given only the
+access it actually needs, minimizing the risk of accidental modification,
+data leakage, or unauthorized access to the project's files.
+
+=== End of Report ===
