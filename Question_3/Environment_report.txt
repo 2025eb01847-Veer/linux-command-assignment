@@ -1,0 +1,153 @@
+=== File System and Link Analysis Report ===
+User: veerd
+Host: Veerdhawal
+Date: 03-07-2026
+
+--------------------------------------------------
+1. Create Original File
+--------------------------------------------------
+Command:
+cd ~/linux-lab-workspace
+echo "This is the original file" > original.txt
+ls -li original.txt
+
+Output:
+1666 -rw-r--r-- 1 veerd veerd 26 Jul  3 16:38 original.txt
+
+Observation:
+original.txt was created with inode number 1666. The ls -li command's first
+column shows this inode number, which is the unique identifier the
+filesystem uses to track the file's actual data on disk, independent of its
+filename. At this point the link count is 1, since only one filename
+(original.txt) points to this inode.
+
+--------------------------------------------------
+2. Create Hard Link
+--------------------------------------------------
+Command:
+ln original.txt hardlink.txt
+ls -li original.txt hardlink.txt
+
+Output:
+1666 -rw-r--r-- 2 veerd veerd 26 Jul  3 2026 hardlink.txt
+1666 -rw-r--r-- 2 veerd veerd 26 Jul  3 2026 original.txt
+
+Observation:
+hardlink.txt was created with the exact same inode number (1666) as
+original.txt. This confirms both filenames point to the same physical data
+on disk — they are indistinguishable copies of the same file entry. The
+link count for both entries has now increased to 2, reflecting that two
+directory entries (filenames) reference this single inode.
+
+--------------------------------------------------
+3. Create Symbolic Link
+--------------------------------------------------
+Command:
+ln -s original.txt symlink.txt
+ls -li original.txt symlink.txt
+
+Output:
+1666 -rw-r--r-- 2 veerd veerd 26 Jul  3 2026 original.txt
+1667 lrwxrwxrwx 1 veerd veerd 12 Jul  3 16:38 symlink.txt -> original.txt
+
+Observation:
+symlink.txt was assigned a completely different inode number (1667),
+proving it is a separate file in its own right. Its size is only 12 bytes —
+just enough to store the path string "original.txt" — rather than the 26
+bytes of actual file content. The "l" at the start of its permission string
+(lrwxrwxrwx) and the "-> original.txt" notation confirm it is a symbolic
+link pointing to a path, not a copy of the data.
+
+--------------------------------------------------
+4. Inode Numbers and Metadata (stat)
+--------------------------------------------------
+Command:
+stat original.txt
+stat hardlink.txt
+stat symlink.txt
+
+Output:
+  File: original.txt
+  Size: 26          Blocks: 8      IO Block: 4096   regular file
+  Device: 8,48      Inode: 1666    Links: 2
+  Access: (0644/-rw-r--r--)  Uid: (1000/veerd)  Gid: (1000/veerd)
+
+  File: hardlink.txt
+  Size: 26          Blocks: 8      IO Block: 4096   regular file
+  Device: 8,48      Inode: 1666    Links: 2
+  Access: (0644/-rw-r--r--)  Uid: (1000/veerd)  Gid: (1000/veerd)
+
+  File: symlink.txt -> original.txt
+  Size: 12          Blocks: 0      IO Block: 4096   symbolic link
+  Device: 8,48      Inode: 1667    Links: 1
+  Access: (0777/lrwxrwxrwx)  Uid: (1000/veerd)  Gid: (1000/veerd)
+
+Observation:
+stat confirms in detail what ls -li showed: original.txt and hardlink.txt
+share Inode 1666 and both report Links: 2, meaning the kernel treats them as
+one file referenced by two names. symlink.txt has its own Inode 1667,
+Links: 1, file type "symbolic link", and permission mode 0777
+(lrwxrwxrwx) — symlinks always show full permissions because the actual
+access check is performed on the target file, not the link itself.
+
+--------------------------------------------------
+5. Delete Original File and Test Link Behavior
+--------------------------------------------------
+Command:
+rm original.txt
+cat hardlink.txt
+cat symlink.txt
+ls -l symlink.txt
+
+Output:
+This is the original file
+cat: symlink.txt: No such file or directory
+lrwxrwxrwx 1 veerd veerd 12 Jul  3 16:38 symlink.txt -> original.txt
+
+Observation:
+After deleting original.txt, hardlink.txt still opened successfully and
+displayed the file's content ("This is the original file"). This is because
+rm only removes a directory entry (filename), not the underlying inode/data
+— since hardlink.txt still references inode 1666, the data remains fully
+accessible. In contrast, cat symlink.txt failed with "No such file or
+directory", because the symlink only stored the path "original.txt", which
+no longer exists. ls -l symlink.txt still shows the link itself intact
+(pointing to original.txt), but it is now a broken/dangling link since its
+target is gone.
+
+--------------------------------------------------
+6. Comparison: Hard Link vs Symbolic Link
+--------------------------------------------------
+Hard Link (hardlink.txt):
+- Shares the same inode number as the original (1666)
+- Directly references the same data blocks on disk
+- Link count increases with each hard link created
+- Survives deletion of the "original" filename, since data is only removed
+  when the link count reaches 0
+- Cannot link across different filesystems/partitions
+- Cannot be created for directories (in most cases)
+
+Symbolic Link (symlink.txt):
+- Has its own unique inode number (1667), separate from the target
+- Stores only a path/string reference to the target filename
+- Link count of the symlink itself stays at 1
+- Breaks ("dangling link") if the target file is deleted, renamed, or moved
+- Can link across different filesystems and can link to directories
+- More flexible but less resilient to the target being removed
+
+--------------------------------------------------
+7. Conclusions
+--------------------------------------------------
+This experiment demonstrates that in Linux, a filename is merely a pointer
+(directory entry) to an inode, not the file itself. A hard link creates an
+additional pointer to the exact same inode, making it resilient to deletion
+of any single filename — the actual data is only freed once all hard links
+(the link count) drop to zero. A symbolic link, by contrast, is a distinct
+file that stores a path to another file; it is more flexible (can span
+filesystems, can point to directories) but fragile, since it breaks the
+moment its target path becomes invalid. Understanding this distinction
+explains real-world scenarios like the one in this task: a developer who
+accidentally deletes a file can still recover its data through an existing
+hard link, but not through a symbolic link.
+
+=== End of Report ===
