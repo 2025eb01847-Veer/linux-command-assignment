@@ -1,0 +1,114 @@
+=====================================================
+ Question 1 - Linux Environment Verification Report
+=====================================================
+
+-----------------------------------------------------
+1. Username and Groups Associated with Account
+-----------------------------------------------------
+Commands:
+  $ whoami
+  $ id
+  $ groups
+
+Output:
+  whoami  -> root
+  id      -> uid=0(root) gid=0(root) groups=0(root)
+  groups  -> root
+
+Observation:
+  The `whoami` command confirms the account currently logged in is
+  "root". The `id` command gives a fuller picture, showing the numeric
+  UID/GID (0 for root) and every group the account belongs to. `groups`
+  simply lists the group names. Here the account belongs only to the
+  "root" group, meaning it has full administrative privileges on this
+  system - important to note in a real environment because root access
+  requires careful handling.
+
+-----------------------------------------------------
+2. Current Shell Being Used
+-----------------------------------------------------
+Commands:
+  $ echo $SHELL
+  $ echo $0
+  $ ps -p $$ -o comm=
+
+Output:
+  $SHELL       -> (empty / not set)
+  $0           -> /bin/sh
+  ps -p $$     -> sh
+
+Observation:
+  $SHELL is meant to report the user's *default login* shell, but it
+  was empty here because this container environment does not export
+  it. The more reliable check is `$0` and `ps -p $$`, both of which
+  confirm the actively running shell is `sh` (a lightweight POSIX
+  shell), not bash. This shows that $SHELL and the actual running
+  shell can differ, especially in minimal/containerized environments.
+
+-----------------------------------------------------
+3. Current Working Directory
+-----------------------------------------------------
+Command:
+  $ pwd
+
+Output (before moving):
+  /
+
+Output (after moving into workspace):
+  /home/claude
+
+Observation:
+  `pwd` prints the absolute path of the directory the shell is
+  currently positioned in. Initially the session started at the
+  filesystem root "/". After using `cd /home/claude`, pwd confirmed
+  the shell had moved into the user workspace directory.
+
+-----------------------------------------------------
+4. List of Files and Directories in Workspace
+-----------------------------------------------------
+Command:
+  $ ls -la
+
+Output:
+  total 36
+  drwxr-xr-x 7 root root 4096 Apr 18 18:10 .
+  drwxr-xr-x 4 root root 4096 Apr 18 18:07 ..
+  drwxr-xr-x 5 root root 4096 Apr 18 18:12 .cache
+  drwxr-xr-x 3 root root 4096 Apr 18 18:10 .config
+  drwxr-xr-x 3 root root 4096 Apr 18 18:10 .local
+  drwxr-xr-x 3 root root 4096 Apr 18 18:12 .npm
+  drwxr-xr-x 5 root root 4096 Apr 18 18:12 .npm-global
+  -rw-r--r-- 1 root root   74 Apr 18 18:10 .npmrc
+  -rw-r--r-- 1 root root  215 Apr 18 18:10 .wget-hsts
+
+Observation:
+  The `-la` flags list ALL entries (including hidden dotfiles like
+  .cache and .npmrc) in long format, showing permissions, owner,
+  group, size, and modification time. This workspace mostly contains
+  hidden configuration/cache directories created automatically by
+  installed tools (npm, wget), with no visible user-created files yet.
+
+-----------------------------------------------------
+5. Network Connectivity Verification Result
+-----------------------------------------------------
+Commands:
+  $ ping -c 4 google.com
+  $ curl -Is https://pypi.org
+
+Output:
+  ping -> "ping: not found" (utility not installed in this minimal
+          environment)
+  curl -Is https://pypi.org -> HTTP/2 200 (successful response with
+          full headers returned)
+
+Observation:
+  The standard `ping` utility was not available in this minimal
+  container, so ICMP-based testing could not be performed directly.
+  As a fallback, `curl -Is` was used to send an HTTP HEAD request to
+  pypi.org, which returned "HTTP/2 200", confirming the machine has
+  working outbound network connectivity and can reach external hosts
+  over HTTPS even without ping.
+
+=====================================================
+ End of Report
+=====================================================
