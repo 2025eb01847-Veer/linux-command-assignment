@@ -1,0 +1,135 @@
+=== Storage Health Assessment Report ===
+User: veerd
+Host: Veerdhawal
+Date: 03-07-2026
+
+--------------------------------------------------
+1. Available Storage Devices
+--------------------------------------------------
+Command:
+lsblk
+sudo fdisk -l
+
+Output (summary):
+NAME  MAJ:MIN RM   SIZE RO TYPE MOUNTPOINTS
+sda     8:0    0 388.6M  1 disk
+sdb     8:16   0   186M  1 disk
+sdc     8:32   0     2G  0 disk [SWAP]
+sdd     8:48   0     1T  0 disk /
+
+Plus multiple small virtual devices /dev/ram0 through /dev/ram15
+(4 MiB each), used internally by the WSL2 environment.
+
+Observation:
+lsblk shows four "real" virtual disks attached to this WSL2 system: sda
+(388.6M), sdb (186M), sdc (2G, configured as swap space), and sdd (1T,
+which holds the root filesystem). The numerous /dev/ram* devices are small
+RAM-backed disks that WSL2 uses internally and are not relevant to actual
+application storage planning. sdd is clearly the primary storage device for
+this system, since it is mounted at the root (/).
+
+--------------------------------------------------
+2. Mounted File Systems
+--------------------------------------------------
+Command:
+mount | column -t
+df -hT
+
+Output (summary):
+Filesystem   Type   Size   Used  Avail  Use%  Mounted on
+/dev/sdd     ext4   1007G  1.9G  954G   1%    /
+C:\          9p     231G   202G  30G    88%   /mnt/c
+D:\          9p     245G   20G   225G   9%    /mnt/d
+none         tmpfs  3.8G   4.0K  3.8G   1%    /mnt/wsl
+rootfs       rootfs 3.8G   2.7M  3.8G   1%    /init
+
+Observation:
+The Linux root filesystem (/dev/sdd, ext4) has 1007G total capacity with
+only 1.9G used (1%) — plenty of headroom. The Windows host drives are
+accessible from within WSL via the 9p protocol: C:\ (mounted at /mnt/c) is
+88% full (202G used of 231G), which is worth flagging even though it's the
+Windows drive, not the Linux filesystem itself. D:\ (/mnt/d) is much
+healthier at only 9% used.
+
+--------------------------------------------------
+3. Disk Usage Statistics
+--------------------------------------------------
+Command:
+df -h
+du -sh ~/* 2>/dev/null
+
+Output:
+/dev/sdd   1007G  1.9G  954G  1%  /
+16K   /home/veerd/ProjectWorkspace
+20K   /home/veerd/linux-lab-workspace
+
+Observation:
+Overall disk usage on the root filesystem confirms only 1% utilization
+system-wide. Within the home directory, the lab work folders created during
+this assignment (ProjectWorkspace and linux-lab-workspace) are extremely
+small — 16K and 20K respectively — confirming that none of our lab
+activities have consumed meaningful disk space.
+
+--------------------------------------------------
+4. Inode Utilization
+--------------------------------------------------
+Command:
+df -i
+
+Output:
+Filesystem   Inodes     IUsed  IFree     IUse%  Mounted on
+/dev/sdd     67108864   49630  67059234  1%     /
+rootfs       994091     12     994079    1%     /init
+tmpfs        995351      556   994795    1%     /run
+
+Observation:
+The root filesystem (/dev/sdd) has just over 67 million inodes available,
+with only 49,630 currently in use — an inode utilization of just 1%. This
+means the system is nowhere near running out of the ability to create new
+files, even though a filesystem can theoretically run out of inodes before
+it runs out of raw disk space, especially in scenarios with millions of
+very small files (e.g., logging-heavy applications).
+
+--------------------------------------------------
+5. Storage Health Observations
+--------------------------------------------------
+- Disk usage on the root filesystem is very low at 1%, so there is no
+  immediate capacity concern for the Linux environment itself.
+- Inode usage is also low at 1%, meaning the filesystem is nowhere near
+  running out of inodes despite having over 67 million available.
+- The Windows C: drive (mounted at /mnt/c) is heavily used at 88%, which is
+  worth monitoring since it is close to running low on space, even though
+  it sits outside the Linux filesystem being assessed.
+- No filesystem relevant to the new application server deployment is near
+  capacity; storage health is currently good.
+
+--------------------------------------------------
+6. Recommendations for Improving Storage Utilization
+--------------------------------------------------
+- Set up periodic cleanup of logs and temporary files (e.g., in /var/log
+  and /tmp) to prevent gradual buildup over the server's lifetime.
+- Monitor inode usage on any filesystem expected to store many small files
+  (such as application logs or session data), since inode exhaustion can
+  block new file creation even while disk space remains available.
+- Keep an eye on the Windows host's C: drive (currently 88% full), since
+  low space on the host can indirectly affect WSL2 performance and
+  available virtual disk growth.
+- Before deploying the new application server, allocate a dedicated
+  filesystem/partition for application data and logs, separate from the OS
+  partition, so usage can be monitored and scaled independently.
+- Consider setting up automated disk usage and inode monitoring/alerts
+  ahead of production deployment, rather than relying on manual checks.
+
+=== End of Report ===
+
+--------------------------------------------------
+Note on Submission Method
+--------------------------------------------------
+This report was required to be created using the vi editor as part of the
+lab. The workflow used was:
+  1. vi Storage_Assessment_Report.txt
+  2. Press i to enter insert mode
+  3. Type the report content shown above
+  4. Press Esc to return to command mode
+  5. Type :wq and press Enter to save and exit
+  6. Verified the saved file using: cat Storage_Assessment_Report.txt
