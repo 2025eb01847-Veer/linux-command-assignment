@@ -1,0 +1,161 @@
+=== File Access and I/O Investigation Report ===
+User: veerd
+Host: Veerdhawal
+Date: 03-07-2026
+
+--------------------------------------------------
+1. Open Files (System-wide and User-specific)
+--------------------------------------------------
+Command:
+lsof | head -20
+lsof -u $(whoami) | head -20
+
+Output (sample):
+COMMAND   PID   USER   FD   TYPE   DEVICE   SIZE/OFF   NODE   NAME
+systemd     1   root   cwd  unknown          /proc/1/cwd (readlink: Permission denied)
+init        7   root   cwd  unknown          /proc/7/cwd (readlink: Permission denied)
+cron      177   root   cwd  unknown          /proc/177/cwd (readlink: Permission denied)
+dbus-daem 178   messagebus  cwd  unknown      /proc/178/cwd (readlink: Permission denied)
+bash      328   veerd  cwd  DIR    8,48  4096   1904  /home/veerd/linux-lab-workspace
+bash      328   veerd  txt  REG    8,48  1446024 1470 /usr/bin/bash
+bash      328   veerd  mem  REG    8,48  2125328 38479 /usr/lib/x86_64-linux-gnu/libc.so.6
+bash      328   veerd  mem  REG    8,48  360460 12229 /usr/lib/locale/C.utf8/LC_CTYPE
+...
+
+Observation:
+lsof lists every file currently opened by every running process, including
+regular files, directories, shared libraries, and devices. System processes
+running as root (systemd, init, cron, dbus-daemon) show "Permission denied"
+for detail lookups since our user does not have root privileges. The
+user-specific listing (lsof -u veerd) clearly shows our own bash shell
+(PID 328) with its current working directory, executable, and all shared
+libraries (mem/REG entries) it has loaded — this is exactly the kind of
+output an engineer would inspect when diagnosing which files an application
+has open.
+
+--------------------------------------------------
+2. File Descriptors of a Running Process
+--------------------------------------------------
+Command:
+tail -f original.txt &
+PID=$!
+ls -l /proc/$PID/fd
+kill $PID
+
+Output:
+[1] 5877
+total 0
+lrwx------ 1 veerd veerd 64 Jul  3 16:41 0 -> /dev/pts/0
+lrwx------ 1 veerd veerd 64 Jul  3 16:41 1 -> /dev/pts/0
+lrwx------ 1 veerd veerd 64 Jul  3 16:41 2 -> /dev/pts/0
+
+Observation:
+tail -f original.txt was launched as a background job with PID 5877 (note:
+original.txt had already been deleted in Question 3, so tail was actually
+waiting on a missing file — this is visible because /proc/$PID/fd only
+shows descriptors 0, 1, and 2, all linked to the terminal /dev/pts/0,
+with no additional descriptor for a data file). This is a good real-world
+observation: it shows what happens when a process is asked to track a file
+that doesn't exist — it still runs and holds standard descriptors open, but
+never gets an extra FD for file data.
+
+--------------------------------------------------
+3. Standard File Descriptors (stdin/stdout/stderr)
+--------------------------------------------------
+Command:
+ls -l /proc/self/fd
+
+Output:
+total 0
+lrwx------ 1 veerd veerd 64 Jul  3 16:42 0 -> /dev/pts/0
+lrwx------ 1 veerd veerd 64 Jul  3 16:42 1 -> /dev/pts/0
+lrwx------ 1 veerd veerd 64 Jul  3 16:42 2 -> /dev/pts/0
+lr-x------ 1 veerd veerd 64 Jul  3 16:42 3 -> /proc/5883/fd
+
+Observation:
+/proc/self/fd always refers to the file descriptor table of whichever
+process is currently running the command (in this case, the ls process
+itself). Descriptors 0 (stdin), 1 (stdout), and 2 (stderr) are all linked
+to the terminal device /dev/pts/0, confirming these three standard streams
+are, by default, connected to the interactive terminal session. Descriptor
+3 is an extra descriptor opened temporarily by ls itself while reading the
+/proc directory.
+
+--------------------------------------------------
+4. Output and Error Redirection
+--------------------------------------------------
+Command:
+echo "Normal output" > out.txt
+cat out.txt
+
+ls /nonexistentfolder 2> err.txt
+cat err.txt
+
+badcommand123 > both.txt 2>&1
+cat both.txt
+
+Output:
+Normal output
+ls: cannot access '/nonexistentfolder': No such file or directory
+badcommand123: command not found
+
+Observation:
+The three redirection operators behaved exactly as expected: > out.txt sent
+standard output ("Normal output") into a file, overwriting any prior
+content. 2> err.txt captured only the standard error stream from the failed
+ls command ("No such file or directory") while leaving stdout untouched.
+Finally, > both.txt 2>&1 merged stderr into the same destination as stdout,
+so the "command not found" error from the invalid command badcommand123 was
+captured in both.txt even though it was technically an error message. This
+demonstrates that Linux treats stdout and stderr as two completely separate
+streams that can be redirected independently or combined.
+
+--------------------------------------------------
+5. Resource Limits
+--------------------------------------------------
+Command:
+ulimit -a
+
+Output:
+core file size          (blocks, -c) 0
+data seg size            (kbytes, -d) unlimited
+file size               (blocks, -f) unlimited
+open files                    (-n) 10240
+pipe size            (512 bytes, -p) 8
+stack size              (kbytes, -s) 8192
+cpu time              (seconds, -t) unlimited
+max user processes            (-u) 31065
+virtual memory           (kbytes, -v) unlimited
+file locks                    (-x) unlimited
+
+Observation:
+ulimit -a reveals the resource limits the kernel enforces on our shell's
+processes. Most notably, "open files" is capped at 10240 — meaning any
+single process (and its children) cannot hold more than 10,240 file
+descriptors open at once, which prevents a runaway or malicious process
+from exhausting system-wide file resources. "max user processes" is capped
+at 31065, limiting how many processes the user veerd can spawn
+simultaneously. "core file size" is 0, meaning crash dumps (core files) are
+disabled by default on this system.
+
+--------------------------------------------------
+6. Explanation: How Linux Manages File I/O
+--------------------------------------------------
+Linux follows the principle that "everything is a file" — regular files,
+directories, devices, pipes, and sockets are all accessed through a uniform
+file descriptor interface. When a process opens a file, the kernel assigns
+it a small integer (the file descriptor) that indexes into a per-process
+file descriptor table; this table in turn points to a system-wide open file
+table, which references the underlying inode holding the actual data. Every
+process starts with three descriptors already open — 0 (stdin), 1 (stdout),
+and 2 (stderr) — normally connected to the controlling terminal, as
+confirmed by our /proc/self/fd output. Shell redirection operators (>, 2>,
+2>&1) work by rewiring these descriptors to point at files instead of the
+terminal before the program even starts executing, which is why a program
+itself doesn't need to know whether its output is going to a screen or a
+file. Finally, the kernel enforces resource limits (via ulimit) on a
+per-process and per-user basis — such as the maximum number of open file
+descriptors — to ensure no single process or user can exhaust shared system
+resources and destabilize the machine.
+
+=== End of Report ===
