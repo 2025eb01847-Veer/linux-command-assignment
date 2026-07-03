@@ -11,39 +11,40 @@ Commands:
   $ groups
 
 Output:
-  whoami  -> root
-  id      -> uid=0(root) gid=0(root) groups=0(root)
-  groups  -> root
+  whoami  -> veerd
+  id      -> uid=1000(veerd) gid=1000(veerd) groups=1000(veerd),4(adm),
+             24(cdrom),27(sudo),30(dip),46(plugdev),100(users)
+  groups  -> veerd adm cdrom sudo dip plugdev users
 
 Observation:
-  The `whoami` command confirms the account currently logged in is
-  "root". The `id` command gives a fuller picture, showing the numeric
-  UID/GID (0 for root) and every group the account belongs to. `groups`
-  simply lists the group names. Here the account belongs only to the
-  "root" group, meaning it has full administrative privileges on this
-  system - important to note in a real environment because root access
-  requires careful handling.
+  The `whoami` command confirms the currently logged-in user is
+  "veerd". The `id` command shows the account has UID 1000 and GID
+  1000 (a standard, non-root user), and belongs to several
+  supplementary groups. Notably, membership in the "sudo" group means
+  this account can execute administrative commands via `sudo` without
+  being root itself - a safer real-world setup than working directly
+  as root. Membership in "adm", "cdrom", "dip", and "plugdev" grants
+  access to system logs, removable media, dial-up/VPN devices, and
+  pluggable devices respectively.
 
 -----------------------------------------------------
 2. Current Shell Being Used
 -----------------------------------------------------
 Commands:
   $ echo $SHELL
-  $ echo $0
-  $ ps -p $$ -o comm=
+  $ ps -p $$
 
 Output:
-  $SHELL       -> (empty / not set)
-  $0           -> /bin/sh
-  ps -p $$     -> sh
+  $SHELL   -> /bin/bash
+  ps -p $$ ->  PID TTY      TIME CMD
+               328 pts/0  00:00:00 bash
 
 Observation:
-  $SHELL is meant to report the user's *default login* shell, but it
-  was empty here because this container environment does not export
-  it. The more reliable check is `$0` and `ps -p $$`, both of which
-  confirm the actively running shell is `sh` (a lightweight POSIX
-  shell), not bash. This shows that $SHELL and the actual running
-  shell can differ, especially in minimal/containerized environments.
+  Both commands confirm the active shell is Bash (Bourne Again Shell),
+  the default interactive shell on most Ubuntu/Debian systems. `$SHELL`
+  reports the user's configured login shell, while `ps -p $$` confirms
+  the process actually running the current session (PID 328) is
+  indeed `bash`, verifying the two are consistent here.
 
 -----------------------------------------------------
 3. Current Working Directory
@@ -51,63 +52,67 @@ Observation:
 Command:
   $ pwd
 
-Output (before moving):
-  /
-
-Output (after moving into workspace):
-  /home/claude
+Output:
+  /home/veerd
 
 Observation:
-  `pwd` prints the absolute path of the directory the shell is
-  currently positioned in. Initially the session started at the
-  filesystem root "/". After using `cd /home/claude`, pwd confirmed
-  the shell had moved into the user workspace directory.
+  `pwd` (print working directory) confirms the session started in the
+  user's home directory, `/home/veerd`, which is the default location
+  a user lands in immediately after login.
 
 -----------------------------------------------------
 4. List of Files and Directories in Workspace
 -----------------------------------------------------
-Command:
+Commands:
+  $ mkdir -p ~/linux-lab-workspace
+  $ cd ~/linux-lab-workspace
   $ ls -la
 
 Output:
-  total 36
-  drwxr-xr-x 7 root root 4096 Apr 18 18:10 .
-  drwxr-xr-x 4 root root 4096 Apr 18 18:07 ..
-  drwxr-xr-x 5 root root 4096 Apr 18 18:12 .cache
-  drwxr-xr-x 3 root root 4096 Apr 18 18:10 .config
-  drwxr-xr-x 3 root root 4096 Apr 18 18:10 .local
-  drwxr-xr-x 3 root root 4096 Apr 18 18:12 .npm
-  drwxr-xr-x 5 root root 4096 Apr 18 18:12 .npm-global
-  -rw-r--r-- 1 root root   74 Apr 18 18:10 .npmrc
-  -rw-r--r-- 1 root root  215 Apr 18 18:10 .wget-hsts
+  total 8
+  drwxr-xr-x 2 veerd veerd 4096 Jul  3 16:24 .
+  drwxr-x--- 4 veerd veerd 4096 Jul  3 16:24 ..
 
 Observation:
-  The `-la` flags list ALL entries (including hidden dotfiles like
-  .cache and .npmrc) in long format, showing permissions, owner,
-  group, size, and modification time. This workspace mostly contains
-  hidden configuration/cache directories created automatically by
-  installed tools (npm, wget), with no visible user-created files yet.
+  A new directory `linux-lab-workspace` was created under the home
+  folder using `mkdir -p`, then entered with `cd`. `ls -la` confirms
+  it is currently empty (only the self-reference "." and parent
+  reference ".." entries exist), owned by user and group "veerd" with
+  standard 755 permissions - the owner has full access while the
+  group and others can read/enter but not write.
 
 -----------------------------------------------------
 5. Network Connectivity Verification Result
 -----------------------------------------------------
-Commands:
+Command:
   $ ping -c 4 google.com
-  $ curl -Is https://pypi.org
 
 Output:
-  ping -> "ping: not found" (utility not installed in this minimal
-          environment)
-  curl -Is https://pypi.org -> HTTP/2 200 (successful response with
-          full headers returned)
+  PING google.com (142.250.182.110) 56(84) bytes of data.
+  64 bytes from maa05s21-in-f14.1e100.net (142.250.182.110):
+      icmp_seq=1 ttl=110 time=57.2 ms
+  64 bytes from maa05s21-in-f14.1e100.net (142.250.182.110):
+      icmp_seq=2 ttl=110 time=0.000 ms
+  64 bytes from maa05s21-in-f14.1e100.net (142.250.182.110):
+      icmp_seq=3 ttl=110 time=58.0 ms
+  64 bytes from maa05s21-in-f14.1e100.net (142.250.182.110):
+      icmp_seq=4 ttl=110 time=74.8 ms
+
+  --- google.com ping statistics ---
+  4 packets transmitted, 4 received, 0% packet loss, time 3004ms
+  rtt min/avg/max/mdev = 0.000/47.504/74.839/28.317 ms
 
 Observation:
-  The standard `ping` utility was not available in this minimal
-  container, so ICMP-based testing could not be performed directly.
-  As a fallback, `curl -Is` was used to send an HTTP HEAD request to
-  pypi.org, which returned "HTTP/2 200", confirming the machine has
-  working outbound network connectivity and can reach external hosts
-  over HTTPS even without ping.
+  All 4 ICMP packets sent to google.com received replies with 0%
+  packet loss, confirming the machine has active, working internet
+  connectivity with an average round-trip time of ~47.5 ms. The
+  hostname google.com was also successfully resolved to the IP
+  address 142.250.182.110, confirming DNS resolution is functioning
+  correctly. Two "time of day goes back" warnings appeared during the
+  test - these indicate the system clock was adjusted (e.g. by NTP
+  synchronization) mid-ping, causing ping to apply countermeasures for
+  accurate timing; this is a benign clock-sync artifact and not a
+  network fault.
 
 =====================================================
  End of Report
